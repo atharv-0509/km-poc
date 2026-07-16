@@ -1,0 +1,18 @@
+# The PoC core runs on the Python standard library alone — no install needed.
+# These are the OPTIONAL production upgrades described in the approach plan.
+# Install what you want; the code auto-detects each and falls back gracefully.
+
+# --- Semantic search: local, open-weight, multilingual embeddings ---
+# Enables true cross-lingual retrieval without the alias lexicon.
+# Then run with:  KM_EMBEDDER=sentence-transformers python -m km ingest
+sentence-transformers>=2.2
+
+# --- OCR for scans: local Tesseract with mar/hin/eng packs ---
+# Also install the system binary: `tesseract-ocr tesseract-ocr-mar
+# tesseract-ocr-hin` (Debian/Ubuntu). No Python OCR model is downloaded.
+pytesseract>=0.3
+Pillow>=9.0
+
+# --- Optional local LLM for the final 2-line answer (still off by default) ---
+# Point KM_LOCAL_LLM at a GGUF model file to enable `--answer` LLM mode.
+llama-cpp-python>=0.2

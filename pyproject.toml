@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "km-poc"
+version = "0.1.0"
+description = "Retrieval-first knowledge management PoC for the Minister's Office"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []  # core runs on the standard library alone
+
+[project.optional-dependencies]
+semantic = ["sentence-transformers>=2.2"]
+ocr = ["pytesseract>=0.3", "Pillow>=9.0"]
+llm = ["llama-cpp-python>=0.2"]
+
+[project.scripts]
+km = "km.cli:main"
+
+[tool.setuptools]
+packages = ["km", "km.ingest"]
