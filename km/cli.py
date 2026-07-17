@@ -2,6 +2,7 @@
 
     python -m km ingest [PATH]      build the index from data/ (or PATH)
     python -m km query "..."        hybrid search; --answer for a summary
+    python -m km gdrive FOLDER_ID   pull + index a Google Drive folder
     python -m km demo               run the Section 8 representative queries
     python -m km serve              start the thin web search UI
     python -m km stats              show what's in the index
@@ -14,7 +15,7 @@ import json
 import sys
 
 from .config import load
-from .pipeline import build_index, open_store, search
+from .pipeline import build_index, build_index_gdrive, open_store, search
 
 # ANSI helpers (fall back to plain if not a TTY).
 def _c(code: str, s: str) -> str:
@@ -130,6 +131,20 @@ def cmd_demo(args) -> int:
     return 0
 
 
+def cmd_gdrive(args) -> int:
+    cfg = load()
+    if args.embedder:
+        cfg.embedder = args.embedder
+    summary = build_index_gdrive(
+        cfg, args.folder_id, creds_path=args.credentials,
+        recursive=not args.no_recursive, reset=not args.append,
+    )
+    print(_c("1;32", f"Pulled + indexed {summary['indexed']} records") +
+          f" from Drive folder {summary['folder_id']}")
+    print(f"  embedder: {summary['embedder']}  db: {summary['db']}")
+    return 0
+
+
 def cmd_stats(args) -> int:
     cfg = load()
     store = open_store(cfg)
@@ -182,6 +197,15 @@ def build_parser() -> argparse.ArgumentParser:
     pd.add_argument("-n", "--limit", type=int, default=5)
     pd.add_argument("--answer", action="store_true")
     pd.set_defaults(func=cmd_demo)
+
+    pg = sub.add_parser("gdrive", help="pull + index a Google Drive folder (service account)")
+    pg.add_argument("folder_id", help="Drive folder id (shared with the service account)")
+    pg.add_argument("-c", "--credentials", help="path to service-account JSON key "
+                    "(or set KM_GDRIVE_CREDENTIALS)")
+    pg.add_argument("--no-recursive", action="store_true", help="do not descend into subfolders")
+    pg.add_argument("--append", action="store_true", help="add to existing index")
+    pg.add_argument("--embedder", choices=["auto", "hashing", "sentence-transformers"])
+    pg.set_defaults(func=cmd_gdrive)
 
     ps = sub.add_parser("stats", help="show index contents")
     ps.set_defaults(func=cmd_stats)

@@ -13,6 +13,7 @@ dependencies = []  # core runs on the standard library alone
 [project.optional-dependencies]
 semantic = ["sentence-transformers>=2.2"]
 formats = ["openpyxl>=3.1", "pymupdf>=1.24", "python-pptx>=0.6", "python-docx>=1.1"]
+gdrive = ["google-api-python-client>=2.0", "google-auth>=2.0"]
 ocr = ["pytesseract>=0.3", "Pillow>=9.0"]
 llm = ["llama-cpp-python>=0.2"]
 

@@ -111,6 +111,22 @@ Install the format libraries with `pip install -e ".[formats]"` (or from
 `requirements-optional.txt`). Regenerate demo fixtures with
 `python scripts/make_fixtures.py`.
 
+### Source connectors (where the files live)
+
+Beyond local paths, `km/ingest/gdrive.py` pulls files straight from a **Google
+Drive** folder using a read-only **service account**, then hands each file to
+the format connectors above:
+
+```bash
+pip install -e ".[gdrive,formats]"
+KM_GDRIVE_CREDENTIALS=key.json python -m km gdrive <FOLDER_ID>
+```
+
+Full walkthrough (service account, folder sharing, Workspace notes) in
+[`docs/GDRIVE_SETUP.md`](docs/GDRIVE_SETUP.md). Google-native files are exported
+on the way out (Sheets→xlsx, Docs→docx, Slides→pptx); provenance keeps the real
+Drive file name and id.
+
 ---
 
 ## Why token usage stays near zero

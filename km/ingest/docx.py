@@ -66,7 +66,17 @@ def ingest_docx(path: str) -> Iterator[Record]:
             source_type=stype,
         )
 
-    for is_heading, text in _iter_block_text(document):
+    blocks = list(_iter_block_text(document))
+    has_headings = any(is_heading for is_heading, _ in blocks)
+
+    if not has_headings:
+        # No Heading styles (common in real reports formatted with manual
+        # bold/large text): fall back to fixed-size paragraph chunks so
+        # sections stay individually retrievable instead of one giant record.
+        yield from _chunked(src, stype, [t for _h, t in blocks])
+        return
+
+    for is_heading, text in blocks:
         if is_heading:
             rec = make(section_title, buf, idx)
             if rec:
@@ -78,5 +88,38 @@ def ingest_docx(path: str) -> Iterator[Record]:
             buf.append(text)
 
     rec = make(section_title, buf, idx)
+    if rec:
+        yield rec
+
+
+def _chunked(src: str, stype: str, paragraphs: list[str], max_chars: int = 1500) -> Iterator[Record]:
+    """Group paragraphs into ~max_chars chunks, one record per chunk."""
+    base = os.path.splitext(src)[0]
+    chunk: list[str] = []
+    size = 0
+    part = 0
+
+    def emit(lines: list[str], n: int) -> Record | None:
+        body = "\n".join(lines).strip()
+        if not body:
+            return None
+        return Record(
+            title=f"{base} (part {n + 1})" if n else base,
+            raw_text=body,
+            source_file=src,
+            row_or_page=f"part {n + 1}",
+            source_type=stype,
+        )
+
+    for para in paragraphs:
+        chunk.append(para)
+        size += len(para)
+        if size >= max_chars:
+            rec = emit(chunk, part)
+            if rec:
+                yield rec
+                part += 1
+            chunk, size = [], 0
+    rec = emit(chunk, part)
     if rec:
         yield rec

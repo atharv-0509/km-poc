@@ -61,6 +61,25 @@ def build_index(cfg: Config, target: str | None = None, reset: bool = True) -> d
     return summary
 
 
+def build_index_gdrive(
+    cfg: Config, folder_id: str, creds_path: str | None = None,
+    recursive: bool = True, reset: bool = False,
+) -> dict:
+    """Pull a Google Drive folder (service account), tag and index it."""
+    from .ingest.gdrive import ingest_gdrive
+
+    if reset and os.path.exists(cfg.db_path):
+        os.remove(cfg.db_path)
+
+    store = open_store(cfg)
+    source = ingest_gdrive(folder_id, creds_path=creds_path, recursive=recursive)
+    n = store.add_many(_tagged(source))
+    summary = {"indexed": n, "embedder": store.embedder.name,
+               "db": cfg.db_path, "folder_id": folder_id}
+    store.close()
+    return summary
+
+
 def search(
     cfg: Config, query: str, limit: int = 10, filters: dict | None = None,
     answer: bool | None = None,
