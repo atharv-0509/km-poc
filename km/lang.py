@@ -60,6 +60,29 @@ def tokenize(text: str) -> list[str]:
     return [t.lower() for t in _WORD.findall(text or "")]
 
 
+# Function words that match nearly every record and only dilute keyword
+# ranking. Kept small and high-precision (English + common Marathi/Hindi).
+STOPWORDS = {
+    "the", "a", "an", "to", "in", "on", "of", "for", "and", "or", "is", "are",
+    "was", "were", "be", "with", "at", "by", "from", "as", "that", "this",
+    "show", "me", "all", "everything", "about", "what", "which", "who", "list",
+    "give", "find", "get", "letter", "letters", "regarding", "request", "please",
+    "व", "आणि", "मध्ये", "साठी", "आहे", "यांना", "का", "की", "के", "में", "और",
+    "को", "है", "पत्र",
+}
+
+
+def content_terms(text: str) -> list[str]:
+    """Query tokens worth matching on: drop stopwords and bare numbers/years
+    (dates are handled by the date filter, not keyword OR-terms)."""
+    out = []
+    for t in tokenize(text):
+        if len(t) < 2 or t in STOPWORDS or t.isdigit():
+            continue
+        out.append(t)
+    return out
+
+
 def expand_terms(text: str) -> list[str]:
     """Cross-lingual expansion: for every known term in `text`, add all of
     its lexicon synonyms. Also expands multi-word terms (e.g. 'water supply').

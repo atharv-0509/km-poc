@@ -20,6 +20,12 @@ from .schema import Record
 from .store import Store
 
 RRF_K = 60  # standard RRF damping constant
+# Keyword is weighted above the vector list in fusion. The dependency-free
+# hashing embedder is noisy on real data (char n-grams conflate e.g.
+# "president"/"prisons"), so exact/field-aware keyword evidence should lead;
+# with a real multilingual model the two are naturally more balanced.
+KEYWORD_WEIGHT = 2.0
+VECTOR_WEIGHT = 1.0
 
 
 @dataclass
@@ -92,9 +98,9 @@ def hybrid_search(
 
     fused: dict[str, float] = {}
     for rid, s in _rrf(kw_ids).items():
-        fused[rid] = fused.get(rid, 0.0) + s
+        fused[rid] = fused.get(rid, 0.0) + KEYWORD_WEIGHT * s
     for rid, s in _rrf(vec_ids).items():
-        fused[rid] = fused.get(rid, 0.0) + s
+        fused[rid] = fused.get(rid, 0.0) + VECTOR_WEIGHT * s
 
     ranked = sorted(fused.items(), key=lambda t: t[1], reverse=True)[:limit]
 

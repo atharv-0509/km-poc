@@ -144,8 +144,25 @@ def shape_rows(
             row_or_page=f"row {r}",
             source_type=stype,
             category=_explicit_category(pairs) or "Uncategorised",
+            key_fields=_key_fields(pairs),
             extra={"columns": pairs},
         )
+
+
+# Column headers that carry the record's "aboutness" (who it's to / what it's
+# about) — weighted above the rest of the row in keyword ranking.
+_KEY_COLUMNS = (
+    "subject", "विषय", "तपशील", "घोषणा", "addressed", "recipient", "to ",
+    "नाव", "name", "particulars", "title", "स्थळ", "place",
+)
+
+
+def _key_fields(pairs: dict[str, str]) -> str:
+    picked = [
+        v for h, v in pairs.items()
+        if v and any(k in h.lower() for k in _KEY_COLUMNS)
+    ]
+    return "  ".join(picked)
 
 
 def ingest_spreadsheet(path: str) -> Iterator[Record]:

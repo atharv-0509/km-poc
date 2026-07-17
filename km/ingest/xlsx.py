@@ -10,12 +10,38 @@ Requires `openpyxl` (optional). Absent → the file is skipped with a warning.
 
 from __future__ import annotations
 
+import datetime
 import os
 from collections.abc import Iterator
 
 from ..schema import Record
 from ._deps import optional_import
 from .spreadsheet import _source_type_for, shape_rows
+
+
+def _fmt_cell(v) -> str:
+    """Render a cell value; dates/datetimes become clean ISO (no 00:00:00)."""
+    if v is None:
+        return ""
+    if isinstance(v, datetime.datetime):
+        if (v.hour, v.minute, v.second) == (0, 0, 0):
+            return v.strftime("%Y-%m-%d")
+        return v.strftime("%Y-%m-%d %H:%M")
+    if isinstance(v, datetime.date):
+        return v.strftime("%Y-%m-%d")
+    return str(v)
+
+
+def _content_key(rec: Record):
+    """A dedup key robust to extra/short columns: the set of substantive
+    (long) cell values. None when the row has no substantive text."""
+    vals = [
+        " ".join(v.split()).lower()  # collapse newlines/spacing from merged fills
+        for v in rec.extra.get("columns", {}).values()
+        if isinstance(v, str)
+    ]
+    sig = tuple(sorted(v for v in vals if len(v) >= 10))
+    return sig or None
 
 
 def _fill_merged(ws) -> None:
@@ -32,7 +58,7 @@ def _fill_merged(ws) -> None:
 def _sheet_grid(ws) -> list[list[str]]:
     grid: list[list[str]] = []
     for row in ws.iter_rows(values_only=True):
-        grid.append(["" if v is None else str(v) for v in row])
+        grid.append([_fmt_cell(v) for v in row])
     return grid
 
 
@@ -45,7 +71,7 @@ def ingest_xlsx(path: str) -> Iterator[Record]:
     stype = _source_type_for(src)
     wb = openpyxl.load_workbook(path, data_only=True, read_only=False)
 
-    seen_fingerprints: set[tuple] = set()
+    seen_content: set[tuple] = set()
     try:
         for ws in wb.worksheets:
             _fill_merged(ws)
@@ -53,12 +79,15 @@ def ingest_xlsx(path: str) -> Iterator[Record]:
             if not any(any(c for c in r) for r in grid):
                 continue  # empty sheet
 
-            # Skip near-duplicate sheets (same header + first data row).
-            fp = tuple(tuple(r) for r in grid[:3])
-            if fp in seen_fingerprints:
-                continue
-            seen_fingerprints.add(fp)
-
-            yield from shape_rows(grid, src, ws.title, stype)
+            # Content-based row dedup across sheets — handles near-duplicate
+            # sheets (e.g. 'Followup' ⊂ 'Sheet1') that a header/first-row
+            # fingerprint misses because of column/offset differences.
+            for rec in shape_rows(grid, src, ws.title, stype):
+                key = _content_key(rec)
+                if key is not None:
+                    if key in seen_content:
+                        continue
+                    seen_content.add(key)
+                yield rec
     finally:
         wb.close()

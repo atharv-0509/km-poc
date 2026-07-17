@@ -176,7 +176,7 @@ swaps behind the same interfaces — no rewrite:
 
 | Concern | PoC (this repo) | Production swap |
 |---|---|---|
-| Embeddings | dependency-free hashing embedder | local open-weight multilingual model, e.g. `paraphrase-multilingual-MiniLM-L12-v2`, self-hosted on GCP GPU/CPU — set `KM_EMBEDDER=sentence-transformers` |
+| Embeddings | dependency-free hashing embedder | local open-weight multilingual model `paraphrase-multilingual-MiniLM-L12-v2` — free and self-hosted; `KM_EMBEDDER=fastembed` (ONNX, no PyTorch, ~0.22 GB) or `KM_EMBEDDER=sentence-transformers` |
 | Vector store | brute-force cosine in SQLite | Qdrant / pgvector in the same GCP project & region |
 | Keyword store | SQLite FTS5 | same, or Elasticsearch/OpenSearch at scale |
 | OCR | Tesseract if present, else text sidecars | Tesseract with language packs on GCP VMs |
@@ -231,8 +231,12 @@ tests/            standard-library unittest suite
 
 ## Known PoC simplifications (deliberate, documented)
 
-- **Hashing embedder** approximates semantics via character n-grams; the real
-  multilingual model is a one-line swap (`KM_EMBEDDER=sentence-transformers`).
+- **Hashing embedder** approximates semantics via character n-grams. It handles
+  most queries well once keyword search is field-aware (recipient/subject
+  weighted above body), but it cannot disambiguate entity/role senses
+  ("President of India" vs "president of a council") or match a translated term
+  to a person's name. The free local multilingual model is a one-flag swap
+  (`KM_EMBEDDER=fastembed`) and resolves those.
 - **Cross-lingual** relies on the alias lexicon for the demo vocabulary; extend
   `km/vocab.py` or switch to the multilingual embedding model for open coverage.
 - **Taxonomy deck sections** are indexed as records, so a category definition

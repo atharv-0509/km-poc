@@ -153,6 +153,50 @@ class TestEndToEnd(unittest.TestCase):
             self.assertEqual(h.record.category, "War Room")
 
 
+class TestFieldAwareRanking(unittest.TestCase):
+    """Recipient/subject fields must outrank incidental body mentions, and
+    common stopwords must not dilute keyword ranking."""
+
+    def setUp(self):
+        from km.embeddings import HashingEmbedder
+        from km.store import Store
+        self.tmp = tempfile.mkdtemp()
+        self.store = Store(os.path.join(self.tmp, "f.sqlite3"), HashingEmbedder())
+        # A: addressed TO the President. B: merely mentions 'president' in body.
+        a = Record(title="Invitation to grace the ceremony", raw_text="body text",
+                   source_file="letters.xlsx", sheet="VIP", row_or_page="row 2",
+                   source_type="letter", key_fields="H.E. President of India")
+        b = Record(title="Budget note", raw_text="the vice president of the club "
+                   "attended along with the president of the society",
+                   source_file="letters.xlsx", sheet="VIP", row_or_page="row 3",
+                   source_type="letter", key_fields="Shri Ramesh Kumar")
+        # Filler so 'president' is a rare term (BM25 IDF is meaningless in a
+        # 2-doc corpus — it goes negative when a term is in most documents).
+        filler = [
+            Record(title=f"Routine letter {i}", raw_text=f"matter number {i} noted",
+                   source_file="letters.xlsx", sheet="VIP", row_or_page=f"row {10+i}",
+                   source_type="letter", key_fields=f"Shri Official {i}")
+            for i in range(12)
+        ]
+        self.store.add_many([tag(a), tag(b), *[tag(f) for f in filler]])
+        self.a_id = a.id
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_recipient_outranks_body_mention(self):
+        hits = self.store.keyword_search("letters to the President", limit=5)
+        self.assertTrue(hits)
+        self.assertEqual(hits[0][0], self.a_id)
+
+    def test_stopwords_dropped(self):
+        from km.lang import content_terms
+        terms = content_terms("Show me all the letters to the President in 2025")
+        self.assertNotIn("the", terms)
+        self.assertNotIn("2025", terms)   # bare year handled by date filter
+        self.assertIn("president", terms)
+
+
 class TestFormatConnectors(unittest.TestCase):
     """Real-file connectors, each skipped unless its optional lib is present."""
 

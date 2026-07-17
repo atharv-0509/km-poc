@@ -214,7 +214,7 @@ def build_parser() -> argparse.ArgumentParser:
     pi = sub.add_parser("ingest", help="ingest + tag + index a path")
     pi.add_argument("path", nargs="?", default=None, help="file or dir (default: data/)")
     pi.add_argument("--append", action="store_true", help="add to existing index")
-    pi.add_argument("--embedder", choices=["auto", "hashing", "sentence-transformers"])
+    pi.add_argument("--embedder", choices=["auto", "hashing", "fastembed", "sentence-transformers"])
     pi.set_defaults(func=cmd_ingest)
 
     pq = sub.add_parser("query", help="hybrid search")
@@ -224,7 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="metadata filter, e.g. -f language=mar -f category='Cabinet Decisions'")
     pq.add_argument("--answer", action="store_true", help="add the optional summary")
     pq.add_argument("--json", action="store_true")
-    pq.add_argument("--embedder", choices=["auto", "hashing", "sentence-transformers"])
+    pq.add_argument("--embedder", choices=["auto", "hashing", "fastembed", "sentence-transformers"])
     pq.set_defaults(func=cmd_query)
 
     pd = sub.add_parser("demo", help="run the representative queries")
@@ -240,7 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
     pg.add_argument("--append", action="store_true", help="add to existing index")
     pg.add_argument("--watch", action="store_true", help="re-pull on an interval (free)")
     pg.add_argument("--interval", type=float, default=300.0, help="re-pull seconds")
-    pg.add_argument("--embedder", choices=["auto", "hashing", "sentence-transformers"])
+    pg.add_argument("--embedder", choices=["auto", "hashing", "fastembed", "sentence-transformers"])
     pg.set_defaults(func=cmd_gdrive)
 
     ps = sub.add_parser("stats", help="show index contents")

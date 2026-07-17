@@ -143,7 +143,11 @@ def tag(record: Record, category_hint: str | None = None) -> Record:
     record.language = detect_language(basis)
     if not record.department:
         record.department = infer_department(basis)
-    if record.category == "Uncategorised":
+    # Letters are correspondence filed by recipient/date, not one of the 12
+    # content categories — inferring one from stray subject words (a district
+    # name, "principal secretary") is misleading, so leave them Uncategorised
+    # unless a connector set an explicit category.
+    if record.category == "Uncategorised" and record.source_type != "letter":
         record.category = infer_category(basis, hint=category_hint)
     if not record.location:
         record.location = extract_locations(basis)

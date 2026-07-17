@@ -20,7 +20,7 @@ import struct
 from collections.abc import Iterable
 
 from .embeddings import Embedder, cosine
-from .lang import expand_terms, tokenize
+from .lang import content_terms, expand_terms, tokenize
 from .schema import Record
 
 _FILTERABLE = ("date", "language", "department", "category", "source_type")
@@ -47,7 +47,7 @@ class Store:
         )
         c.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5("
-            "  id UNINDEXED, title, body, tokenize='unicode61')"
+            "  id UNINDEXED, title, keys, body, tokenize='unicode61')"
         )
         c.execute(
             """CREATE TABLE IF NOT EXISTS vectors (
@@ -74,9 +74,19 @@ class Store:
              record.category, record.source_type, record.to_json()),
         )
         c.execute("DELETE FROM fts WHERE id=?", (record.id,))
+        # keys = the connector-identified aboutness fields (recipient / subject)
+        # PLUS the cross-lingual aliases of *those fields only*. This keeps the
+        # high-weight column focused: a recipient "राष्ट्रपती" still matches an
+        # English "president" query, without body terms leaking in and diluting
+        # field-aware ranking (the body column carries body aliases separately).
+        keys = record.key_fields
+        if record.key_fields:
+            aliases = expand_terms(record.key_fields)
+            if aliases:
+                keys = record.key_fields + "  " + " ".join(aliases)
         c.execute(
-            "INSERT INTO fts(id,title,body) VALUES(?,?,?)",
-            (record.id, record.title, record.search_text()),
+            "INSERT INTO fts(id,title,keys,body) VALUES(?,?,?,?)",
+            (record.id, record.title, keys, record.search_text()),
         )
         vec = self.embedder.embed(record.search_text())
         c.execute(
@@ -110,15 +120,21 @@ class Store:
         The query is tokenised and cross-lingually expanded, so exact IDs and
         English↔Marathi term matches both hit the keyword index.
         """
-        terms = set(tokenize(query)) | set(expand_terms(query))
+        terms = set(content_terms(query)) | set(expand_terms(query))
         terms = {t for t in terms if len(t) >= 2}
+        if not terms:
+            # Query was all stopwords/numbers — fall back to raw tokens.
+            terms = {t for t in tokenize(query) if len(t) >= 2}
         if not terms:
             return []
         match = " OR ".join(f'"{t}"' for t in sorted(terms))
 
         where, params = self._filter_sql(filters)
+        # Weight columns (id, title, keys, body): recipient/subject ("keys")
+        # and title dominate, so a match in the aboutness fields clearly beats
+        # several incidental body mentions.
         sql = (
-            "SELECT f.id AS id, bm25(fts) AS rank FROM fts f "
+            "SELECT f.id AS id, bm25(fts, 0.0, 6.0, 12.0, 1.0) AS rank FROM fts f "
             "JOIN records r ON r.id = f.id "
             "WHERE fts MATCH ? " + where + " ORDER BY rank LIMIT ?"
         )

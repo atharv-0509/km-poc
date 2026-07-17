@@ -3,8 +3,20 @@
 # Install what you want; the code auto-detects each and falls back gracefully.
 
 # --- Semantic search: local, open-weight, multilingual embeddings ---
-# Enables true cross-lingual retrieval without the alias lexicon.
-# Then run with:  KM_EMBEDDER=sentence-transformers python -m km ingest
+# Enables true cross-lingual + entity/role disambiguation without the alias
+# lexicon (e.g. "President of India" vs "president of a council", राष्ट्रपती
+# matching a recipient's name). Two free, local options:
+#
+#   fastembed (lightest: ONNX, no PyTorch, ~0.22 GB model):
+#     pip install fastembed
+#     KM_EMBEDDER=fastembed python -m km ingest
+#
+#   sentence-transformers (heavier, same model family):
+#     KM_EMBEDDER=sentence-transformers python -m km ingest
+#
+# Both download model weights once from the Hugging Face hub (or a mirror /
+# local path via HF_HOME), then run fully offline with zero per-query cost.
+fastembed>=0.3
 sentence-transformers>=2.2
 
 # --- Format connectors (auto-detected; each file type skipped if absent) ---

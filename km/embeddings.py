@@ -87,6 +87,31 @@ class HashingEmbedder:
         return _l2_normalise(vec)
 
 
+class FastEmbedEmbedder:
+    """Local multilingual embeddings via fastembed (ONNX, no PyTorch).
+
+    The lightest free path to real semantic + cross-lingual retrieval: the
+    default model is `paraphrase-multilingual-MiniLM-L12-v2` (~0.22 GB), the
+    exact model the approach plan names. Model weights download once from the
+    Hugging Face hub (or a mirror / local path set via HF_HOME); after that it
+    is fully offline. No per-token cost.
+    """
+
+    def __init__(
+        self,
+        model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    ) -> None:
+        from fastembed import TextEmbedding  # lazy import
+
+        self.name = f"fastembed:{model_name.split('/')[-1]}"
+        self._model = TextEmbedding(model_name=model_name)
+        self.dim = len(next(iter(self._model.embed(["probe"]))))
+
+    def embed(self, text: str) -> list[float]:
+        vec = next(iter(self._model.embed([text or ""])))
+        return _l2_normalise([float(x) for x in vec])
+
+
 class SentenceTransformerEmbedder:
     """Local open-weight multilingual embeddings. Production backend."""
 
@@ -105,14 +130,18 @@ class SentenceTransformerEmbedder:
 def get_embedder(prefer: str = "auto") -> Embedder:
     """Select a backend.
 
-    prefer: 'auto' (sentence-transformers if importable, else hashing),
-            'hashing' (force the dependency-free backend),
-            'sentence-transformers' (force; raises if unavailable).
+    prefer:
+      'auto'                  hashing — instant, free, no download (default)
+      'hashing'               force the dependency-free backend
+      'fastembed'             local multilingual ONNX model (no torch)
+      'sentence-transformers' local multilingual model via sentence-transformers
+
+    Model backends are only used when explicitly requested, so 'auto' never
+    triggers a surprise model download; each raises if its library or model
+    weights are unavailable.
     """
-    if prefer in ("auto", "sentence-transformers"):
-        try:
-            return SentenceTransformerEmbedder()
-        except Exception:
-            if prefer == "sentence-transformers":
-                raise
+    if prefer == "fastembed":
+        return FastEmbedEmbedder()
+    if prefer == "sentence-transformers":
+        return SentenceTransformerEmbedder()
     return HashingEmbedder()
