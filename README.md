@@ -36,6 +36,11 @@ python -m km query "semiconductor manufacturing meetings" --answer
 
 # 6. Thin web search UI
 python -m km serve      # then open http://127.0.0.1:8080
+
+# 7. Live automation (free): auto-reindex as files arrive
+python -m km serve --watch     # UI + auto-reindex; drop a file in data/, it
+                               # becomes searchable within seconds, no restart
+python -m km watch             # headless: just the auto-reindex loop
 ```
 
 Run the tests (also standard-library only):
@@ -128,6 +133,25 @@ on the way out (Sheets→xlsx, Docs→docx, Slides→pptx); provenance keeps the
 Drive file name and id.
 
 ---
+
+## Automation, and why it's completely free
+
+The whole PoC runs on the Python **standard library** — free hashing embedder +
+SQLite keyword index, no paid LLM, no cloud, no per-query cost. The optional
+Google Drive connector uses Google's **free** Drive API with a **free** service
+account. Every paid component (GCP GPU VMs, hosted multilingual embeddings, a
+hosted LLM) is an *optional production upgrade that is off by default*.
+
+The automation loop is stdlib polling — no `watchdog`, no scheduler service:
+
+| Command | What it automates | Cost |
+|---|---|---|
+| `python -m km serve --watch` | web UI **and** live auto-reindex: any file dropped into `data/` is ingested → tagged → indexed → searchable within seconds, no restart | free |
+| `python -m km watch` | headless auto-reindex loop over `data/` | free |
+| `python -m km gdrive <id> --watch --interval 300` | periodic re-pull of a Drive folder, then reindex | free (Drive API) |
+
+The UI header shows the live record count and last-updated time, so you can
+demo "add a file → watch it appear" in real time.
 
 ## Why token usage stays near zero
 

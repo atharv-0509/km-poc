@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import html
 import json
+import os
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -44,7 +46,8 @@ PAGE = """<!doctype html>
  .empty{color:var(--muted);padding:20px 0}
 </style></head><body>
 <header><h1>Minister's Office — Knowledge Search</h1>
-<div class="sub">Retrieval-first PoC · local hybrid search (keyword + semantic) · multilingual · every result cited</div></header>
+<div class="sub">Retrieval-first PoC · local hybrid search (keyword + semantic) · multilingual · every result cited</div>
+<div class="sub" id="status">index: …</div></header>
 <main>
  <form id="f">
    <input type="text" id="q" name="q" placeholder="Ask a question, e.g. Letters to the President in 2025" autofocus>
@@ -91,6 +94,13 @@ PAGE = """<!doctype html>
  }
  $('#f').addEventListener('submit',e=>{e.preventDefault();run($('#q').value);});
  document.querySelectorAll('.examples a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();run(a.dataset.q);}));
+ async function refreshStatus(){
+   try{const s=await(await fetch('/api/stats')).json();
+     $('#status').textContent='index: '+s.records+' records · '+s.embedder+
+       ' · updated '+s.updated+(s.watching?' · live auto-reindex ON':'');
+   }catch(e){}
+ }
+ refreshStatus(); setInterval(refreshStatus, 3000);
 </script>
 </body></html>"""
 
@@ -120,7 +130,27 @@ def _make_handler(cfg: Config):
                 self._send(200, self._search(query, want_answer),
                            "application/json; charset=utf-8")
                 return
+            if parsed.path == "/api/stats":
+                self._send(200, self._stats(),
+                           "application/json; charset=utf-8")
+                return
             self._send(404, "not found", "text/plain")
+
+        def _stats(self):
+            store = open_store(cfg)
+            try:
+                n = store.count()
+                embedder = store.embedder.name
+            finally:
+                store.close()
+            updated = "—"
+            if os.path.exists(cfg.db_path):
+                updated = time.strftime(
+                    "%H:%M:%S", time.localtime(os.path.getmtime(cfg.db_path)))
+            return json.dumps({
+                "records": n, "embedder": embedder, "updated": updated,
+                "watching": getattr(cfg, "_watching", False),
+            })
 
         def _search(self, query, want_answer):
             store = open_store(cfg)

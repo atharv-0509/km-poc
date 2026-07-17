@@ -4,7 +4,8 @@
     python -m km query "..."        hybrid search; --answer for a summary
     python -m km gdrive FOLDER_ID   pull + index a Google Drive folder
     python -m km demo               run the Section 8 representative queries
-    python -m km serve              start the thin web search UI
+    python -m km watch              auto-reindex data/ whenever files change
+    python -m km serve [--watch]    web UI; --watch auto-reindexes live
     python -m km stats              show what's in the index
 """
 
@@ -135,6 +136,16 @@ def cmd_gdrive(args) -> int:
     cfg = load()
     if args.embedder:
         cfg.embedder = args.embedder
+    if args.watch:
+        from .automation import watch_gdrive
+        print(_c("1;32", f"Re-pulling Drive folder {args.folder_id} every "
+                         f"{args.interval}s (free). Ctrl-C to stop."))
+        try:
+            watch_gdrive(cfg, args.folder_id, creds_path=args.credentials,
+                         interval=args.interval)
+        except KeyboardInterrupt:
+            print("\nstopped.")
+        return 0
     summary = build_index_gdrive(
         cfg, args.folder_id, creds_path=args.credentials,
         recursive=not args.no_recursive, reset=not args.append,
@@ -167,8 +178,31 @@ def cmd_stats(args) -> int:
 
 def cmd_serve(args) -> int:
     from .web import serve
+    from .automation import start_background_watch
     cfg = load()
-    serve(cfg)
+    stop = None
+    if args.watch:
+        cfg._watching = True
+        stop = start_background_watch(cfg, interval=args.interval)
+        print(_c("1;32", f"live auto-reindex ON — watching {cfg.data_dir}/ "
+                         f"every {args.interval}s"))
+    try:
+        serve(cfg)
+    finally:
+        if stop:
+            stop.set()
+    return 0
+
+
+def cmd_watch(args) -> int:
+    from .automation import watch_local
+    cfg = load()
+    print(_c("1;32", f"Watching {cfg.data_dir}/ — drop files in to auto-index. "
+                     f"Ctrl-C to stop."))
+    try:
+        watch_local(cfg, interval=args.interval)
+    except KeyboardInterrupt:
+        print("\nstopped.")
     return 0
 
 
@@ -204,6 +238,8 @@ def build_parser() -> argparse.ArgumentParser:
                     "(or set KM_GDRIVE_CREDENTIALS)")
     pg.add_argument("--no-recursive", action="store_true", help="do not descend into subfolders")
     pg.add_argument("--append", action="store_true", help="add to existing index")
+    pg.add_argument("--watch", action="store_true", help="re-pull on an interval (free)")
+    pg.add_argument("--interval", type=float, default=300.0, help="re-pull seconds")
     pg.add_argument("--embedder", choices=["auto", "hashing", "sentence-transformers"])
     pg.set_defaults(func=cmd_gdrive)
 
@@ -211,7 +247,14 @@ def build_parser() -> argparse.ArgumentParser:
     ps.set_defaults(func=cmd_stats)
 
     pv = sub.add_parser("serve", help="start the web search UI")
+    pv.add_argument("--watch", action="store_true",
+                    help="auto-reindex data/ live while serving")
+    pv.add_argument("--interval", type=float, default=2.0, help="watch poll seconds")
     pv.set_defaults(func=cmd_serve)
+
+    pw = sub.add_parser("watch", help="auto-reindex data/ on every change")
+    pw.add_argument("--interval", type=float, default=2.0, help="poll seconds")
+    pw.set_defaults(func=cmd_watch)
     return p
 
 
