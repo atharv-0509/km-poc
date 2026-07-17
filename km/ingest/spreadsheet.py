@@ -108,22 +108,23 @@ def _source_type_for(name: str) -> str:
     return "tracker"
 
 
-def ingest_spreadsheet(path: str) -> Iterator[Record]:
-    src = os.path.basename(path)
-    sheet = _sheet_name(path)
-    stype = _source_type_for(src)
+def shape_rows(
+    rows: list[list[str]], src: str, sheet: str, stype: str
+) -> Iterator[Record]:
+    """Turn a raw 2D grid into clean records: detect the real header row,
+    dedupe columns, and emit one record per populated data row.
 
-    with open(path, newline="", encoding="utf-8-sig", errors="replace") as fh:
-        rows = list(csv.reader(fh))
+    Shared by the CSV connector and the XLSX connector so header detection and
+    record shaping behave identically regardless of the file format.
+    """
     if not rows:
         return
-
     hidx = detect_header(rows)
-    headers = _dedupe_headers(rows[hidx])
+    headers = _dedupe_headers([str(c) for c in rows[hidx]])
     ncols = len(headers)
 
     for r, row in enumerate(rows[hidx + 1:], start=hidx + 2):  # 1-based row no.
-        cells = [c.strip() for c in row]
+        cells = [str(c).strip() for c in row]
         if not any(cells):
             continue  # skip blank rows
         # Pad/truncate to header width.
@@ -132,7 +133,6 @@ def ingest_spreadsheet(path: str) -> Iterator[Record]:
         if not pairs:
             continue
 
-        # Title: first meaningful field; else first two values joined.
         title = _pick_title(pairs)
         body = "\n".join(f"{h}: {v}" for h, v in pairs.items())
 
@@ -146,6 +146,16 @@ def ingest_spreadsheet(path: str) -> Iterator[Record]:
             category=_explicit_category(pairs) or "Uncategorised",
             extra={"columns": pairs},
         )
+
+
+def ingest_spreadsheet(path: str) -> Iterator[Record]:
+    src = os.path.basename(path)
+    sheet = _sheet_name(path)
+    stype = _source_type_for(src)
+
+    with open(path, newline="", encoding="utf-8-sig", errors="replace") as fh:
+        rows = list(csv.reader(fh))
+    yield from shape_rows(rows, src, sheet, stype)
 
 
 _DATEISH = re.compile(r"^\s*\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}\s*$")

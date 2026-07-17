@@ -81,7 +81,7 @@ files → │ 1. Ingest &  │ → │ 2. Tag &     │ → │ 3. Index     │
 
 | Stage | Module | What it does |
 |---|---|---|
-| 1. Ingest & normalise | `km/ingest/` | One connector per source type. `spreadsheet.py` detects the *real* header row (not row 1), dedupes duplicate columns, emits one clean record per data row. `ocr.py` turns scans into text (Tesseract `mar+hin+eng` when present; sidecar/plain-text fallback otherwise). `deck.py` splits decks/notes into per-section records. |
+| 1. Ingest & normalise | `km/ingest/` | One connector per source type. `spreadsheet.py` detects the *real* header row (not row 1), dedupes duplicate columns, emits one clean record per data row; `xlsx.py` reuses that logic per worksheet and fills merged cells. `pdf.py` reads the text layer and OCRs scanned pages. `pptx.py` pulls slide text + presenter notes; `docx.py` splits by headings. `ocr.py` turns image scans into text (Tesseract `mar+hin+eng` when present; sidecar/plain-text fallback otherwise). `deck.py` splits markdown decks/notes into per-section records. |
 | 2. Tag & standardise | `km/tagging.py`, `km/vocab.py`, `km/lang.py` | Rule-based only — **no model per record**. Date parsing, script-based language detection, department lookup from a fixed list, category from the 12-value taxonomy (trusting an explicit category column over free text), regex entity/location extraction. |
 | 3. Index | `km/store.py`, `km/embeddings.py` | One portable SQLite file holds the records, an **FTS5/BM25 keyword index**, and one **embedding per record**. Embeddings come from a pluggable provider. |
 | 4. Retrieve & answer | `km/search.py`, `km/answer.py` | Keyword + semantic results fused with **Reciprocal Rank Fusion**. Returns ranked records with citations. Optional 2-line answer sits on top, **off by default**. |
@@ -89,6 +89,27 @@ files → │ 1. Ingest &  │ → │ 2. Tag &     │ → │ 3. Index     │
 The record schema in `km/schema.py` (Section 6 of the plan) is the **contract**
 between the ingestion half and the retrieval half — lock it first, build each
 half independently.
+
+### Supported source formats
+
+Dispatched by extension in `km/ingest/__init__.py`. Formats needing a
+third-party library are **auto-detected** — if the library isn't installed the
+file is skipped with a one-line warning and the rest still ingest, so a mixed
+folder always indexes everything it can.
+
+| Format | Connector | Notes | Dependency |
+|---|---|---|---|
+| `.csv` / `.tsv` | `spreadsheet.py` | header-row detection, dedup columns, explicit-category column | none (stdlib) |
+| `.xlsx` / `.xlsm` | `xlsx.py` | per-sheet, merged-cell fill, near-duplicate-sheet skip | `openpyxl` |
+| `.pdf` | `pdf.py` | text layer per page; scanned pages rasterised → OCR | `pymupdf` (+ Tesseract) |
+| `.pptx` | `pptx.py` | slide text **+** presenter notes, one record per slide | `python-pptx` |
+| `.docx` | `docx.py` | section-split by Heading styles, tables included | `python-docx` |
+| `.md` / `.txt` | `deck.py` | per-section decks/notes | none (stdlib) |
+| `.png/.jpg/.tif` | `ocr.py` | Tesseract `mar+hin+eng`, sidecar/text fallback | `pytesseract`, `Pillow` |
+
+Install the format libraries with `pip install -e ".[formats]"` (or from
+`requirements-optional.txt`). Regenerate demo fixtures with
+`python scripts/make_fixtures.py`.
 
 ---
 
@@ -152,7 +173,9 @@ km/
   vocab.py        fixed department list, category hints, cross-lingual lexicon
   lang.py         language detection + cross-lingual expansion (no model)
   tagging.py      rule-based date/category/entity/location tagging
-  ingest/         Stage 1 connectors: spreadsheet (header detection), deck, ocr
+  ingest/         Stage 1 connectors: csv/xlsx (header detection), pdf, pptx,
+                  docx, deck, ocr — dispatched by extension, optional deps
+                  auto-detected
   embeddings.py   pluggable embedder: hashing (default) | sentence-transformers
   store.py        Stage 3: SQLite records + FTS5 keyword + vector store
   search.py       Stage 4: hybrid RRF search with citations
@@ -175,8 +198,9 @@ tests/            standard-library unittest suite
 - **Taxonomy deck sections** are indexed as records, so a category definition
   can rank alongside actual records for a broad query — expected, since the deck
   is itself a knowledge source.
-- **CSV** stands in for `.xlsx`; the header-detection and record-shaping logic
-  is unchanged when an `.xlsx` reader is plugged into the same connector.
+- **Sample data ships as CSV/markdown/text** so the demo runs with zero installs;
+  the real `.xlsx/.pdf/.pptx/.docx` connectors are implemented and tested (install
+  `".[formats]"` and drop those files into `data/`).
 
 ## The two open questions from the plan (Section 9)
 

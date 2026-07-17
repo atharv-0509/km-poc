@@ -12,8 +12,12 @@ from collections.abc import Iterator
 
 from ..schema import Record
 from .deck import ingest_deck
+from .docx import ingest_docx
 from .ocr import ingest_scan
+from .pdf import ingest_pdf
+from .pptx import ingest_pptx
 from .spreadsheet import ingest_spreadsheet
+from .xlsx import ingest_xlsx
 
 
 def ingest_path(path: str) -> Iterator[Record]:
@@ -21,13 +25,21 @@ def ingest_path(path: str) -> Iterator[Record]:
     ext = os.path.splitext(path)[1].lower()
     if ext in (".csv", ".tsv"):
         yield from ingest_spreadsheet(path)
+    elif ext in (".xlsx", ".xlsm"):
+        yield from ingest_xlsx(path)
+    elif ext == ".pdf":
+        yield from ingest_pdf(path)
+    elif ext == ".pptx":
+        yield from ingest_pptx(path)
+    elif ext == ".docx":
+        yield from ingest_docx(path)
     elif ext in (".md", ".markdown", ".txt"):
         # Decks/notes as markdown; scans arrive as .txt sidecars via ingest_scan.
         if os.path.basename(path).startswith("scan") or ".ocr" in os.path.basename(path):
             yield from ingest_scan(path)
         else:
             yield from ingest_deck(path)
-    elif ext in (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".pdf"):
+    elif ext in (".png", ".jpg", ".jpeg", ".tif", ".tiff"):
         yield from ingest_scan(path)
     else:
         # Unknown type: index as a single plain-text record so nothing is lost.

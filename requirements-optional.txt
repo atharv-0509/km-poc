@@ -7,6 +7,13 @@
 # Then run with:  KM_EMBEDDER=sentence-transformers python -m km ingest
 sentence-transformers>=2.2
 
+# --- Format connectors (auto-detected; each file type skipped if absent) ---
+# XLSX Excel trackers/letters, PDF reports, PPTX decks, DOCX minutes/letters.
+openpyxl>=3.1          # .xlsx / .xlsm
+pymupdf>=1.24          # .pdf (text layer + rasterise for scanned pages)
+python-pptx>=0.6       # .pptx (slide text + presenter notes)
+python-docx>=1.1       # .docx (section-split by headings)
+
 # --- OCR for scans: local Tesseract with mar/hin/eng packs ---
 # Also install the system binary: `tesseract-ocr tesseract-ocr-mar
 # tesseract-ocr-hin` (Debian/Ubuntu). No Python OCR model is downloaded.

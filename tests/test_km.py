@@ -12,11 +12,17 @@ import unittest
 
 from km.config import Config
 from km.embeddings import HashingEmbedder, cosine
+from km.ingest import ingest_path
 from km.ingest.spreadsheet import detect_header, _dedupe_headers
 from km.lang import detect_language, expand_terms
 from km.pipeline import build_index, search
 from km.schema import Record
 from km.tagging import parse_date, infer_category, tag
+
+
+def _has(mod: str) -> bool:
+    import importlib.util
+    return importlib.util.find_spec(mod) is not None
 
 
 class TestSchema(unittest.TestCase):
@@ -145,6 +151,84 @@ class TestEndToEnd(unittest.TestCase):
         self.assertTrue(res.hits)
         for h in res.hits:
             self.assertEqual(h.record.category, "War Room")
+
+
+class TestFormatConnectors(unittest.TestCase):
+    """Real-file connectors, each skipped unless its optional lib is present."""
+
+    def _tag_all(self, path):
+        return [tag(r) for r in ingest_path(path)]
+
+    @unittest.skipUnless(_has("openpyxl"), "openpyxl not installed")
+    def test_xlsx_header_and_merged_cells(self):
+        import openpyxl
+        tmp = tempfile.mkdtemp()
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws["A1"] = "Cabinet Tracker 2025"          # merged title
+        ws.merge_cells("A1:D1")
+        ws["A2"] = "confidential"                   # subtitle
+        for c, h in enumerate(["Sr", "Date", "प्रवर्ग", "तपशील"], start=1):
+            ws.cell(row=3, column=c, value=h)       # real header on row 3
+        ws.append([1, "2025-03-12", "Cabinet Decisions", "SAMAGRA database adopted"])
+        p = os.path.join(tmp, "cabinet_tracker.xlsx")
+        wb.save(p)
+
+        recs = self._tag_all(p)
+        self.assertEqual(len(recs), 1)
+        r = recs[0]
+        self.assertEqual(r.category, "Cabinet Decisions")   # from explicit column
+        self.assertEqual(r.row_or_page, "row 4")
+        self.assertIn("SAMAGRA", r.raw_text)
+
+    @unittest.skipUnless(_has("docx"), "python-docx not installed")
+    def test_docx_sections(self):
+        import docx
+        tmp = tempfile.mkdtemp()
+        d = docx.Document()
+        d.add_heading("Minutes of PS Meeting", level=1)
+        d.add_paragraph("Chaired by the Principal Secretary.")
+        d.add_heading("Water supply review", level=2)
+        d.add_paragraph("पाणीपुरवठा mission status presented.")
+        p = os.path.join(tmp, "ps_meeting_minutes.docx")
+        d.save(p)
+
+        recs = self._tag_all(p)
+        self.assertGreaterEqual(len(recs), 2)
+        self.assertTrue(all(r.source_type == "minutes" for r in recs))
+
+    @unittest.skipUnless(_has("pptx"), "python-pptx not installed")
+    def test_pptx_slide_and_notes(self):
+        import pptx
+        tmp = tempfile.mkdtemp()
+        prs = pptx.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[1])
+        slide.shapes.title.text = "Quantum Mission Overview"
+        slide.placeholders[1].text = "Quantum park at Pune"
+        slide.notes_slide.notes_text_frame.text = "outlay pending"
+        p = os.path.join(tmp, "quantum_deck.pptx")
+        prs.save(p)
+
+        recs = self._tag_all(p)
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0].source_type, "deck")
+        self.assertIn("outlay", recs[0].raw_text)   # notes captured
+
+    @unittest.skipUnless(_has("fitz"), "pymupdf not installed")
+    def test_pdf_text_layer(self):
+        import fitz
+        tmp = tempfile.mkdtemp()
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "REPORT: Semiconductor manufacturing", fontsize=11)
+        p = os.path.join(tmp, "semiconductor_report.pdf")
+        doc.save(p)
+        doc.close()
+
+        recs = self._tag_all(p)
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0].row_or_page, "page 1")
+        self.assertIn("Semiconductor", recs[0].raw_text)
 
 
 if __name__ == "__main__":
