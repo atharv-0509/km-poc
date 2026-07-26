@@ -47,7 +47,7 @@ class Store:
         )
         c.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5("
-            "  id UNINDEXED, title, keys, body, tokenize='unicode61')"
+            "  id UNINDEXED, title, recipient, keys, body, tokenize='unicode61')"
         )
         c.execute(
             """CREATE TABLE IF NOT EXISTS vectors (
@@ -74,19 +74,15 @@ class Store:
              record.category, record.source_type, record.to_json()),
         )
         c.execute("DELETE FROM fts WHERE id=?", (record.id,))
-        # keys = the connector-identified aboutness fields (recipient / subject)
-        # PLUS the cross-lingual aliases of *those fields only*. This keeps the
-        # high-weight column focused: a recipient "राष्ट्रपती" still matches an
-        # English "president" query, without body terms leaking in and diluting
-        # field-aware ranking (the body column carries body aliases separately).
-        keys = record.key_fields
-        if record.key_fields:
-            aliases = expand_terms(record.key_fields)
-            if aliases:
-                keys = record.key_fields + "  " + " ".join(aliases)
+        # recipient/keys carry the aboutness fields PLUS the cross-lingual
+        # aliases of *those fields only* — so a recipient "राष्ट्रपती" matches an
+        # English "president" query without body terms leaking into the
+        # high-weight columns and diluting field-aware ranking.
         c.execute(
-            "INSERT INTO fts(id,title,keys,body) VALUES(?,?,?,?)",
-            (record.id, record.title, keys, record.search_text()),
+            "INSERT INTO fts(id,title,recipient,keys,body) VALUES(?,?,?,?,?)",
+            (record.id, record.title,
+             _with_aliases(record.recipient), _with_aliases(record.key_fields),
+             record.search_text()),
         )
         vec = self.embedder.embed(record.search_text())
         c.execute(
@@ -130,11 +126,12 @@ class Store:
         match = " OR ".join(f'"{t}"' for t in sorted(terms))
 
         where, params = self._filter_sql(filters)
-        # Weight columns (id, title, keys, body): recipient/subject ("keys")
-        # and title dominate, so a match in the aboutness fields clearly beats
-        # several incidental body mentions.
+        # Weight columns (id, title, recipient, keys, body): the recipient
+        # dominates (a letter addressed to the President beats one whose subject
+        # merely says "...as President of..."), then subject/topic, then title,
+        # then incidental body mentions.
         sql = (
-            "SELECT f.id AS id, bm25(fts, 0.0, 6.0, 12.0, 1.0) AS rank FROM fts f "
+            "SELECT f.id AS id, bm25(fts, 0.0, 6.0, 16.0, 8.0, 1.0) AS rank FROM fts f "
             "JOIN records r ON r.id = f.id "
             "WHERE fts MATCH ? " + where + " ORDER BY rank LIMIT ?"
         )
@@ -180,6 +177,15 @@ class Store:
 
     def close(self) -> None:
         self.conn.close()
+
+
+def _with_aliases(text: str) -> str:
+    """Append a field's own cross-lingual aliases to it (for the weighted
+    recipient/keys FTS columns)."""
+    if not text:
+        return ""
+    aliases = expand_terms(text)
+    return text + ("  " + " ".join(aliases) if aliases else "")
 
 
 def _expand_query_text(query: str) -> str:

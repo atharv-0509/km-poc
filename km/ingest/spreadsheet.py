@@ -144,23 +144,25 @@ def shape_rows(
             row_or_page=f"row {r}",
             source_type=stype,
             category=_explicit_category(pairs) or "Uncategorised",
-            key_fields=_key_fields(pairs),
+            recipient=_pick_fields(pairs, _RECIPIENT_COLUMNS),
+            key_fields=_pick_fields(pairs, _SUBJECT_COLUMNS),
             extra={"columns": pairs},
         )
 
 
-# Column headers that carry the record's "aboutness" (who it's to / what it's
-# about) — weighted above the rest of the row in keyword ranking.
-_KEY_COLUMNS = (
-    "subject", "विषय", "तपशील", "घोषणा", "addressed", "recipient", "to ",
-    "नाव", "name", "particulars", "title", "स्थळ", "place",
+# Headers naming who a record is addressed to (weighted highest).
+_RECIPIENT_COLUMNS = ("addressed", "recipient", "to ", "नाव", "name", "प्रति")
+# Headers naming the record's subject / topic (weighted above body).
+_SUBJECT_COLUMNS = (
+    "subject", "विषय", "तपशील", "घोषणा", "particulars", "title",
+    "स्थळ", "place", "description",
 )
 
 
-def _key_fields(pairs: dict[str, str]) -> str:
+def _pick_fields(pairs: dict[str, str], headers: tuple[str, ...]) -> str:
     picked = [
         v for h, v in pairs.items()
-        if v and any(k in h.lower() for k in _KEY_COLUMNS)
+        if v and any(k in h.lower() for k in headers)
     ]
     return "  ".join(picked)
 

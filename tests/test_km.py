@@ -165,11 +165,13 @@ class TestFieldAwareRanking(unittest.TestCase):
         # A: addressed TO the President. B: merely mentions 'president' in body.
         a = Record(title="Invitation to grace the ceremony", raw_text="body text",
                    source_file="letters.xlsx", sheet="VIP", row_or_page="row 2",
-                   source_type="letter", key_fields="H.E. President of India")
+                   source_type="letter", recipient="H.E. President of India")
+        # B only *mentions* president in its subject/body, addressed to someone else.
         b = Record(title="Budget note", raw_text="the vice president of the club "
                    "attended along with the president of the society",
                    source_file="letters.xlsx", sheet="VIP", row_or_page="row 3",
-                   source_type="letter", key_fields="Shri Ramesh Kumar")
+                   source_type="letter", recipient="Shri Ramesh Kumar",
+                   key_fields="nominate the member as President of the society")
         # Filler so 'president' is a rare term (BM25 IDF is meaningless in a
         # 2-doc corpus — it goes negative when a term is in most documents).
         filler = [

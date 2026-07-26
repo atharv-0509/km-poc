@@ -79,9 +79,13 @@ class Record:
     # translations so both the keyword and (fallback) vector index can
     # bridge languages even without a multilingual embedding model.
     alias_text: str = ""
-    # The "aboutness" fields — recipient / subject / who-and-what — that a
-    # connector identified. Weighted above body text in keyword ranking so
-    # "letters to the President" matches the recipient, not a stray mention.
+    # Who the record is addressed to / its primary named target. Weighted
+    # highest in keyword ranking so "letters to the President" matches a
+    # recipient of "President of India", above a subject that merely says
+    # "...as President of...".
+    recipient: str = ""
+    # The subject / topic "aboutness" fields. Weighted above body but below
+    # recipient.
     key_fields: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
