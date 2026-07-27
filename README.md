@@ -11,6 +11,9 @@ This repository is a **runnable proof of concept** of the approach plan in
 indexes them for hybrid keyword + semantic search, and answers plain-language
 questions with **cited** results.
 
+> **▶ Just want to run it?** See **[RUNNING.md](RUNNING.md)** — step-by-step for
+> Windows and macOS/Linux, no cost, no internet needed for the core.
+
 ---
 
 ## Quickstart (zero dependencies)
